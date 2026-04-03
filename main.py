@@ -85,7 +85,7 @@ async def start_tolov(message: Message, state: FSMContext):
 @dp.message(Tolov.mijoz)
 async def get_mijoz(message: Message, state: FSMContext):
     await state.update_data(mijoz=message.text)
-    await message.answer("Necha dollar tolayapti? (faqat raqam, masalan: 150.50)")
+    await message.answer("Qancha to'layabdi? (USD da, misol: 2150.50)")
     await state.set_state(Tolov.summa)
 
 @dp.message(Tolov.summa)
