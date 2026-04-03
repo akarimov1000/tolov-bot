@@ -309,6 +309,25 @@ def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", send
             uzs_usd = round(naqd_uzs / user_kurs, 2)
             lines.append("  Naqd UZS: " + uzs_format(naqd_uzs) + " (~$" + str(uzs_usd) + " | kurs: " + uzs_format(user_kurs) + ")")
 
+    # Real jami va farq
+    naqd_usd_v = data.get("naqd_usd", 0) or 0
+    naqd_uzs_v = data.get("naqd_uzs", 0) or 0
+    karta_v = data.get("karta", 0) or 0
+    turi_v = data.get("tolov_turi", "")
+    if naqd_uzs_v > 0:
+        uzs_usd_v = round(naqd_uzs_v / user_kurs, 2)
+        if turi_v == "naqd":
+            real_jami = round(naqd_usd_v + uzs_usd_v, 2)
+        elif turi_v == "aralash":
+            real_jami = round(karta_v + naqd_usd_v + uzs_usd_v, 2)
+        else:
+            real_jami = None
+        if real_jami is not None:
+            farq = round(real_jami - data.get("summa", 0), 2)
+            farq_str = ("+" if farq >= 0 else "") + str(farq)
+            lines.append("")
+            lines.append("Real jami: $" + str(real_jami) + " (farq " + farq_str + ")")
+
     if data.get("finish"):
         lines.append("FINISH")
         if data.get("skidka", 0) > 0:
