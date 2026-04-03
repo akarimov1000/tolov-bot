@@ -20,7 +20,11 @@ dp = Dispatcher(storage=MemoryStorage())
 user_phones = {}
 kurs = {}  # {user_id: 12500}
 
+PAROL = "credomarket0105"
+authenticated = set()
+
 class Tolov(StatesGroup):
+    parol_kirish = State()
     kurs_kirish = State()
     mijoz = State()
     summa = State()
@@ -82,7 +86,10 @@ def uzs_format(uzs):
 @dp.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     uid = message.from_user.id
-    if uid not in user_phones:
+    if uid not in authenticated:
+        await message.answer("Salom! Parolni kiriting:")
+        await state.set_state(Tolov.parol_kirish)
+    elif uid not in user_phones:
         kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="Raqamni ulashish", request_contact=True)]],
             resize_keyboard=True, one_time_keyboard=True
@@ -93,6 +100,26 @@ async def start(message: Message, state: FSMContext):
         await state.set_state(Tolov.kurs_kirish)
     else:
         await message.answer("Salom! Quyidagi menyudan foydalaning:", reply_markup=main_menu())
+
+@dp.message(Tolov.parol_kirish)
+async def check_parol(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if message.text.strip() == PAROL:
+        authenticated.add(uid)
+        await state.clear()
+        if uid not in user_phones:
+            kb = ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="Raqamni ulashish", request_contact=True)]],
+                resize_keyboard=True, one_time_keyboard=True
+            )
+            await message.answer("Parol togri! Telefon raqamingizni ulashing:", reply_markup=kb)
+        elif uid not in kurs:
+            await message.answer("Parol togri! Hozirgi dollar kursini kiriting (masalan: 12800):")
+            await state.set_state(Tolov.kurs_kirish)
+        else:
+            await message.answer("Parol togri! Xush kelibsiz.", reply_markup=main_menu())
+    else:
+        await message.answer("Parol notogri! Qaytadan kiriting:")
 
 @dp.message(F.contact)
 async def get_contact(message: Message, state: FSMContext):
