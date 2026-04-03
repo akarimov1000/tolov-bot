@@ -8,19 +8,18 @@ from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardB
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8736560386:AAHgOAW2vK2kf_3TfV5_Tli_h0GRilQ8s5o")
 CHANNEL = "@TOLOVLARKIRITISHUCHUNTEST"
+PAROL = "credomarket0105"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 user_phones = {}
-kurs = {}  # {user_id: 12500}
-
-PAROL = "credomarket0105"
+kurs = {}
 authenticated = set()
 
 class Tolov(StatesGroup):
@@ -80,9 +79,27 @@ def tahrirlash_kb():
         [InlineKeyboardButton(text="Orqaga", callback_data="tahrirla_orqaga")],
     ])
 
+def orqaga_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Orqaga")]],
+        resize_keyboard=True
+    )
+
+def tayyor_orqaga_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Tayyor")],
+            [KeyboardButton(text="Orqaga")],
+        ],
+        resize_keyboard=True
+    )
+
 def uzs_format(uzs):
     return "{:,.0f}".format(uzs).replace(",", " ")
 
+# =====================
+# AUTH
+# =====================
 @dp.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     uid = message.from_user.id
@@ -94,12 +111,12 @@ async def start(message: Message, state: FSMContext):
             keyboard=[[KeyboardButton(text="Raqamni ulashish", request_contact=True)]],
             resize_keyboard=True, one_time_keyboard=True
         )
-        await message.answer("Salom! Avval telefon raqamingizni ulashing:", reply_markup=kb)
+        await message.answer("Avval telefon raqamingizni ulashing:", reply_markup=kb)
     elif uid not in kurs:
-        await message.answer("Hozirgi dollar kursini kiriting (masalan: 12800):")
+        await message.answer("Hozirgi dollar kursini kiriting (masalan: 12800):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.kurs_kirish)
     else:
-        await message.answer("Salom! Quyidagi menyudan foydalaning:", reply_markup=main_menu())
+        await message.answer("Xush kelibsiz!", reply_markup=main_menu())
 
 @dp.message(Tolov.parol_kirish)
 async def check_parol(message: Message, state: FSMContext):
@@ -114,7 +131,7 @@ async def check_parol(message: Message, state: FSMContext):
             )
             await message.answer("Parol togri! Telefon raqamingizni ulashing:", reply_markup=kb)
         elif uid not in kurs:
-            await message.answer("Parol togri! Hozirgi dollar kursini kiriting (masalan: 12800):")
+            await message.answer("Parol togri! Dollar kursini kiriting (masalan: 12800):", reply_markup=orqaga_kb())
             await state.set_state(Tolov.kurs_kirish)
         else:
             await message.answer("Parol togri! Xush kelibsiz.", reply_markup=main_menu())
@@ -124,15 +141,24 @@ async def check_parol(message: Message, state: FSMContext):
 @dp.message(F.contact)
 async def get_contact(message: Message, state: FSMContext):
     uid = message.from_user.id
+    if uid not in authenticated:
+        return
     user_phones[uid] = message.contact.phone_number
     if uid not in kurs:
-        await message.answer("Raqam saqlandi!\n\nHozirgi dollar kursini kiriting (masalan: 12800):")
+        await message.answer("Raqam saqlandi! Dollar kursini kiriting (masalan: 12800):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.kurs_kirish)
     else:
         await message.answer("Raqam saqlandi!", reply_markup=main_menu())
 
+# =====================
+# KURS
+# =====================
 @dp.message(Tolov.kurs_kirish)
 async def get_kurs(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await state.clear()
+        await message.answer("Bosh menyu:", reply_markup=main_menu())
+        return
     try:
         k = int(message.text.strip().replace(" ", "").replace(",", ""))
         if k <= 0:
@@ -146,12 +172,19 @@ async def get_kurs(message: Message, state: FSMContext):
 @dp.message(F.text == "Kursni ozgartirish")
 async def change_kurs(message: Message, state: FSMContext):
     uid = message.from_user.id
+    if uid not in authenticated:
+        return
     cur = kurs.get(uid, "---")
-    await message.answer("Hozirgi kurs: 1$ = " + (uzs_format(cur) if cur != "---" else "---") + " UZS\n\nYangi kursni kiriting:")
+    cur_str = uzs_format(cur) if cur != "---" else "---"
+    await message.answer("Hozirgi kurs: 1$ = " + cur_str + " UZS\n\nYangi kursni kiriting:", reply_markup=orqaga_kb())
     await state.set_state(KursState.yangi_kurs)
 
 @dp.message(KursState.yangi_kurs)
 async def save_kurs(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await state.clear()
+        await message.answer("Bosh menyu:", reply_markup=main_menu())
+        return
     try:
         k = int(message.text.strip().replace(" ", "").replace(",", ""))
         if k <= 0:
@@ -162,61 +195,81 @@ async def save_kurs(message: Message, state: FSMContext):
     except:
         await message.answer("Faqat raqam kiriting!")
 
+# =====================
+# TOLOV
+# =====================
 @dp.message(F.text == "Tolov kiritish")
 async def start_tolov(message: Message, state: FSMContext):
     uid = message.from_user.id
+    if uid not in authenticated:
+        return
     if uid not in kurs:
-        await message.answer("Avval kursni kiriting:")
+        await message.answer("Avval kursni kiriting:", reply_markup=orqaga_kb())
         await state.set_state(Tolov.kurs_kirish)
         return
     await state.clear()
     await state.update_data(chek_ids=[])
-    await message.answer("Mijoz ismi:", reply_markup=ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True))
+    await message.answer("Mijoz ismi:", reply_markup=orqaga_kb())
     await state.set_state(Tolov.mijoz)
 
 @dp.message(Tolov.mijoz)
 async def get_mijoz(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await state.clear()
+        await message.answer("Bosh menyu:", reply_markup=main_menu())
+        return
     await state.update_data(mijoz=message.text)
-    await message.answer("Jami qancha tolayabdi? (masalan: 150.50)")
+    await message.answer("Jami qancha tolayabdi? (masalan: 150.50)", reply_markup=orqaga_kb())
     await state.set_state(Tolov.summa)
 
 @dp.message(Tolov.summa)
 async def get_summa(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await message.answer("Mijoz ismi:", reply_markup=orqaga_kb())
+        await state.set_state(Tolov.mijoz)
+        return
     text = message.text.strip().replace(",", ".")
     try:
         summa = round(float(text), 2)
         if summa <= 0:
             raise ValueError
         await state.update_data(summa=summa)
-        await message.answer("Jami: $" + str(summa) + "\n\nTolov turini tanlang:", reply_markup=tolov_turi_kb())
+        await message.answer("Jami: $" + str(summa) + "\n\nTolov turini tanlang:", reply_markup=orqaga_kb())
         await state.set_state(Tolov.tolov_turi)
+        await message.answer(" ", reply_markup=tolov_turi_kb())
     except:
         await message.answer("Faqat raqam kiriting! Masalan: 150 yoki 150.50")
+
+@dp.message(Tolov.tolov_turi, F.text == "Orqaga")
+async def tolov_turi_orqaga(message: Message, state: FSMContext):
+    await message.answer("Jami qancha tolayabdi?", reply_markup=orqaga_kb())
+    await state.set_state(Tolov.summa)
 
 @dp.callback_query(F.data.startswith("turi_"), Tolov.tolov_turi)
 async def get_turi(callback: CallbackQuery, state: FSMContext):
     turi = callback.data.replace("turi_", "")
     await state.update_data(tolov_turi=turi, karta=None, naqd_usd=None, naqd_uzs=0)
     await callback.message.edit_reply_markup()
-
     if turi == "naqd":
-        data = await state.get_data()
-        await callback.message.answer("Naqd USD qismi: (masalan: 100)\n(Hammasi UZS da bolsa 0 yozing)")
+        await callback.message.answer("Naqd USD qismi (masalan: 100)\n(Hammasi UZS bolsa 0 yozing):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.naqd_usd)
-
     elif turi == "karta":
-        await callback.message.answer("Chek rasmini yuboring (tugagach /tayyor yozing):")
+        await callback.message.answer("Chek rasmini yuboring:", reply_markup=tayyor_orqaga_kb())
         await state.set_state(Tolov.chek)
-
     elif turi == "aralash":
         data = await state.get_data()
-        await callback.message.answer("Karta qismi USD (masalan: 50):\n(Jami: $" + str(data["summa"]) + ")")
+        await callback.message.answer("Karta qismi USD (masalan: 50)\nJami: $" + str(data["summa"]), reply_markup=orqaga_kb())
         await state.set_state(Tolov.karta_summa)
-
     await callback.answer()
 
 @dp.message(Tolov.karta_summa)
 async def get_karta_summa(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        data = await state.get_data()
+        await message.answer("Jami: $" + str(data.get("summa", 0)) + "\n\nTolov turini tanlang:", reply_markup=orqaga_kb())
+        await state.set_state(Tolov.tolov_turi)
+        await message.answer(" ", reply_markup=tolov_turi_kb())
+        return
     try:
         data = await state.get_data()
         karta_s = round(float(message.text.strip().replace(",", ".")), 2)
@@ -224,39 +277,50 @@ async def get_karta_summa(message: Message, state: FSMContext):
         if karta_s < 0 or naqd_total < 0:
             raise ValueError
         await state.update_data(karta=karta_s)
-        await message.answer("Karta: $" + str(karta_s) + "\nNaqd jami: $" + str(naqd_total) + "\n\nNaqd USD qismi (masalan: 70):\n(Hammasi UZS bolsa 0 yozing)")
+        await message.answer("Karta: $" + str(karta_s) + "\nNaqd: $" + str(naqd_total) + "\n\nNaqd USD qismi (masalan: 70)\n(Hammasi UZS bolsa 0 yozing):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.naqd_usd)
     except:
         await message.answer("Faqat raqam kiriting!")
 
 @dp.message(Tolov.naqd_usd)
 async def get_naqd_usd(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        data = await state.get_data()
+        if data.get("tolov_turi") == "aralash":
+            await message.answer("Karta qismi USD:", reply_markup=orqaga_kb())
+            await state.set_state(Tolov.karta_summa)
+        else:
+            await message.answer("Jami: $" + str(data.get("summa", 0)) + "\n\nTolov turini tanlang:", reply_markup=orqaga_kb())
+            await state.set_state(Tolov.tolov_turi)
+            await message.answer(" ", reply_markup=tolov_turi_kb())
+        return
     try:
         naqd_usd = round(float(message.text.strip().replace(",", ".")), 2)
         if naqd_usd < 0:
             raise ValueError
         await state.update_data(naqd_usd=naqd_usd)
-        await message.answer("Naqd UZS qismi (masalan: 610000):\n(Yoq bolsa 0 yozing)")
+        await message.answer("Naqd UZS qismi (masalan: 610000)\n(Yoq bolsa 0 yozing):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.naqd_uzs)
     except:
         await message.answer("Faqat raqam kiriting!")
 
 @dp.message(Tolov.naqd_uzs)
 async def get_naqd_uzs(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await message.answer("Naqd USD qismi:", reply_markup=orqaga_kb())
+        await state.set_state(Tolov.naqd_usd)
+        return
     try:
         naqd_uzs = int(message.text.strip().replace(" ", "").replace(",", ""))
         if naqd_uzs < 0:
             raise ValueError
         await state.update_data(naqd_uzs=naqd_uzs)
         data = await state.get_data()
-        if data.get("tolov_turi") == "karta":
-            pass
-        elif data.get("tolov_turi") in ["naqd", "aralash"]:
-            if data.get("tolov_turi") == "aralash":
-                await message.answer("Chek rasmini yuboring (tugagach /tayyor yozing):")
-                await state.set_state(Tolov.chek)
-                return
-        await show_finish(message, state)
+        if data.get("tolov_turi") == "aralash":
+            await message.answer("Chek rasmini yuboring:", reply_markup=tayyor_orqaga_kb())
+            await state.set_state(Tolov.chek)
+        else:
+            await show_finish(message, state)
     except:
         await message.answer("Faqat raqam kiriting!")
 
@@ -266,15 +330,34 @@ async def get_chek(message: Message, state: FSMContext):
     cheklar = data.get("chek_ids", [])
     cheklar.append(message.photo[-1].file_id)
     await state.update_data(chek_ids=cheklar)
-    await message.answer("Chek qabul qilindi (" + str(len(cheklar)) + " ta). Yana yuborishingiz yoki /tayyor yozing.")
+    await message.answer("Chek qabul qilindi (" + str(len(cheklar)) + " ta). Yana yuborishingiz yoki Tayyor bosing.")
 
-@dp.message(Tolov.chek, F.text == "/tayyor")
+@dp.message(Tolov.chek, F.text == "Tayyor")
 async def chek_tayyor(message: Message, state: FSMContext):
     await show_finish(message, state)
 
+@dp.message(Tolov.chek, F.text == "Orqaga")
+async def chek_orqaga(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await state.update_data(chek_ids=[])
+    await message.answer("Naqd UZS qismi:", reply_markup=orqaga_kb())
+    await state.set_state(Tolov.naqd_uzs)
+
 async def show_finish(message: Message, state: FSMContext):
-    await message.answer("Bu mijozning oxirgi tolovi (finish) mi?", reply_markup=finish_kb())
+    await message.answer("Bu mijozning oxirgi tolovi (finish) mi?", reply_markup=orqaga_kb())
+    await message.answer(" ", reply_markup=finish_kb())
     await state.set_state(Tolov.finish)
+
+@dp.message(Tolov.finish, F.text == "Orqaga")
+async def finish_orqaga(message: Message, state: FSMContext):
+    data = await state.get_data()
+    turi = data.get("tolov_turi")
+    if turi == "karta":
+        await message.answer("Chek rasmini yuboring:", reply_markup=tayyor_orqaga_kb())
+        await state.set_state(Tolov.chek)
+    else:
+        await message.answer("Naqd UZS qismi:", reply_markup=orqaga_kb())
+        await state.set_state(Tolov.naqd_uzs)
 
 @dp.callback_query(F.data.startswith("finish_"), Tolov.finish)
 async def get_finish(callback: CallbackQuery, state: FSMContext):
@@ -288,12 +371,15 @@ async def get_finish(callback: CallbackQuery, state: FSMContext):
         await show_preview(callback.message, state)
     elif action == "skidka":
         await state.update_data(finish=True)
-        await callback.message.answer("Skidka miqdori (USD):")
+        await callback.message.answer("Skidka miqdori (USD):", reply_markup=orqaga_kb())
         await state.set_state(Tolov.skidka)
     await callback.answer()
 
 @dp.message(Tolov.skidka)
 async def get_skidka(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await show_finish(message, state)
+        return
     try:
         skidka = round(float(message.text.strip().replace(",", ".")), 2)
         await state.update_data(skidka=skidka)
@@ -301,10 +387,12 @@ async def get_skidka(message: Message, state: FSMContext):
     except:
         await message.answer("Faqat raqam kiriting!")
 
+def uzs_format(uzs):
+    return "{:,.0f}".format(uzs).replace(",", " ")
+
 def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", sender_phone=""):
     turi_map = {"naqd": "Naqd", "karta": "Kartadan", "aralash": "Aralash (Naqd + Karta)"}
     turi = turi_map.get(data.get("tolov_turi", ""), "---")
-
     lines = [
         "YANGI TOLOV",
         "-------------------",
@@ -312,23 +400,20 @@ def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", send
         "Jami: $" + str(data.get("summa", 0)),
         "Turi: " + turi,
     ]
+    naqd_usd = data.get("naqd_usd", 0) or 0
+    naqd_uzs = data.get("naqd_uzs", 0) or 0
+    karta_s = data.get("karta", 0) or 0
+    turi_v = data.get("tolov_turi", "")
 
-    if data.get("tolov_turi") == "karta":
+    if turi_v == "karta":
         lines.append("Karta: $" + str(data.get("summa", 0)))
-
-    elif data.get("tolov_turi") == "naqd":
-        naqd_usd = data.get("naqd_usd", 0)
-        naqd_uzs = data.get("naqd_uzs", 0)
+    elif turi_v == "naqd":
         if naqd_usd > 0:
             lines.append("  USD: $" + str(naqd_usd))
         if naqd_uzs > 0:
             uzs_usd = round(naqd_uzs / user_kurs, 2)
             lines.append("  UZS: " + uzs_format(naqd_uzs) + " (~$" + str(uzs_usd) + " | kurs: " + uzs_format(user_kurs) + ")")
-
-    elif data.get("tolov_turi") == "aralash":
-        karta_s = data.get("karta", 0)
-        naqd_usd = data.get("naqd_usd", 0)
-        naqd_uzs = data.get("naqd_uzs", 0)
+    elif turi_v == "aralash":
         lines.append("  Karta: $" + str(karta_s))
         if naqd_usd > 0:
             lines.append("  Naqd USD: $" + str(naqd_usd))
@@ -336,17 +421,12 @@ def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", send
             uzs_usd = round(naqd_uzs / user_kurs, 2)
             lines.append("  Naqd UZS: " + uzs_format(naqd_uzs) + " (~$" + str(uzs_usd) + " | kurs: " + uzs_format(user_kurs) + ")")
 
-    # Real jami va farq
-    naqd_usd_v = data.get("naqd_usd", 0) or 0
-    naqd_uzs_v = data.get("naqd_uzs", 0) or 0
-    karta_v = data.get("karta", 0) or 0
-    turi_v = data.get("tolov_turi", "")
-    if naqd_uzs_v > 0:
-        uzs_usd_v = round(naqd_uzs_v / user_kurs, 2)
+    if naqd_uzs > 0:
+        uzs_usd = round(naqd_uzs / user_kurs, 2)
         if turi_v == "naqd":
-            real_jami = round(naqd_usd_v + uzs_usd_v, 2)
+            real_jami = round(naqd_usd + uzs_usd, 2)
         elif turi_v == "aralash":
-            real_jami = round(karta_v + naqd_usd_v + uzs_usd_v, 2)
+            real_jami = round(karta_s + naqd_usd + uzs_usd, 2)
         else:
             real_jami = None
         if real_jami is not None:
@@ -366,7 +446,6 @@ def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", send
         lines.append("Kiritdi: " + sender_name + uname)
     if sender_phone:
         lines.append("Tel: " + sender_phone)
-
     return "\n".join(lines)
 
 async def show_preview(message: Message, state: FSMContext):
@@ -408,12 +487,16 @@ async def tahrirla_field(callback: CallbackQuery, state: FSMContext):
             "skidka": "Yangi skidkani yozing (USD):"
         }
         await state.update_data(tahrirlash_field=field)
-        await callback.message.answer(labels.get(field, "Yangi qiymatni yozing:"))
+        await callback.message.answer(labels.get(field, "Yangi qiymatni yozing:"), reply_markup=orqaga_kb())
         await state.set_state(Tolov.tahrirlash)
     await callback.answer()
 
 @dp.message(Tolov.tahrirlash)
 async def save_tahrirlash(message: Message, state: FSMContext):
+    if message.text == "Orqaga":
+        await state.set_state(Tolov.tasdiqlash)
+        await show_preview(message, state)
+        return
     data = await state.get_data()
     field = data.get("tahrirlash_field")
     if field in ["summa", "skidka"]:
