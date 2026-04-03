@@ -387,9 +387,6 @@ async def get_skidka(message: Message, state: FSMContext):
     except:
         await message.answer("Faqat raqam kiriting!")
 
-def uzs_format(uzs):
-    return "{:,.0f}".format(uzs).replace(",", " ")
-
 def format_tolov(data, user_kurs=12500, sender_name="", sender_username="", sender_phone=""):
     turi_map = {"naqd": "Naqd", "karta": "Kartadan", "aralash": "Aralash (Naqd + Karta)"}
     turi = turi_map.get(data.get("tolov_turi", ""), "---")
