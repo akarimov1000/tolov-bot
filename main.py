@@ -1,4 +1,5 @@
-python# -*- coding: utf-8 -*-
+python
+
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 import asyncio
